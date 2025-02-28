@@ -1,5 +1,6 @@
 # ComputationalHeatTransfer.jl
-tools for numerical simulation of conductive and convective heat transfer
+tools for numerical simulation of conductive and convective heat transfer.  Operations principle described in
+Y. Li, J.D. Eldredge, A.S. Lavine et al., "A conjugate heat transfer model of oscillating heat pipe dynamics, performance, and dryout," International Journal of Heat and Mass Transfer 227 (2024) 125530
 
 [![Dev](https://img.shields.io/badge/docs-stable-blue.svg)](https://liyuxuan48.github.io/ComputationalHeatTransfer.jl)
 
