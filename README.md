@@ -5,7 +5,7 @@ Described in:
 
 Y. Li, J.D. Eldredge, A.S. Lavine et al., "A conjugate heat transfer model of oscillating heat pipe dynamics, performance, and dryout," International Journal of Heat and Mass Transfer 227 (2024) 125530
 
-[![Dev](https://img.shields.io/badge/docs-stable-blue.svg)](https://liyuxuan48.github.io/ComputationalHeatTransfer.jl)
+[![Dev](https://img.shields.io/badge/docs-stable-blue.svg)](https://liyuxuan48.github.io/ComputationalHeatTransfer.jl](https://github.com/jpfeser/ConjugateHT_OHP_1DFluid_2DHeat.jl)
 
 This readme file assumes user already installed the **IJulia** package and got the jupyter notebook running.
 
