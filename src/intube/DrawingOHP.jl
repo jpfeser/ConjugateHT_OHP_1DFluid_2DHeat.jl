@@ -16,6 +16,18 @@ function construct_ohp_curve(OHPtype::String,Δx::Real)
     return x, y, xf, yf = ComputationalHeatTransfer.construct_ohp_curve(nturn,pitch,length_ohp,gap,ds,x0,y0,false,false,pi/2)
     end
 
+    if OHPtype == "Deepak-r1"
+    ds = 1.5Δx
+    nturn = 16
+    width_ohp = 49.5*1e-3
+    length_ohp = 126.5*1e-3
+    gap = 1e-3
+    pitch = width_ohp/(2*nturn+1)
+    x0, y0 = -length_ohp/2 -2e-3, -width_ohp/2
+
+    return x, y, xf, yf = ComputationalHeatTransfer.construct_ohp_curve(nturn,pitch,length_ohp,gap,ds,x0,y0,false,false,pi/2)
+    end
+
     return "Type wrong"
 end
 
