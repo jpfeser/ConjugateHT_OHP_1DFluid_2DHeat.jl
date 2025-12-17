@@ -1,9 +1,12 @@
 export merging_affect!,merging_condition,nucleateboiling,merging
+VERBOSE_CALLBACKS = Ref(false)
 
 function merging_affect!(integrator)
 
+    VERBOSE_CALLBACKS[] && println("CALLBACK: liquidmerging_affect! at t=$(integrator.t)")
+
     p = getcurrentsys(integrator.u,integrator.p);
-    δv = 0.8*p.wall.L_newbubble
+    δv = 0.7*p.wall.L_newbubble
 
     merge_flags = getmerge_flags(δv,p)
     indexmergingsite = sort(findall(x->x == true, merge_flags),rev = true)
@@ -39,7 +42,7 @@ function merging_condition(u,t,integrator)     # only for closed loop tube
 
     p = getcurrentsys!(integrator.u,integrator.p);
     # δv = p.tube.d > (integrator.dt*maximum(p.liquid.dXdt)[1]) ? p.tube.d : (integrator.dt*maximum(p.liquid.dXdt)[1])
-    δv = 0.5*p.wall.L_newbubble
+    δv = 0.7*p.wall.L_newbubble
 
     sys = p
 

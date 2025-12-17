@@ -1,4 +1,5 @@
 export fixdx_affect!,fixdx_condition
+VERBOSE_CALLBACKS = Ref(false)
 # boiling_condition,
 function fixdx_condition(u,t,integrator)
 
@@ -37,6 +38,7 @@ end
 
 
 function fixdx_affect!(integrator)
+    VERBOSE_CALLBACKS[] && println("CALLBACK: fixdx_affect! at t=$(integrator.t)")
 
     p = deepcopy(getcurrentsys!(integrator.u,integrator.p));
     L = p.tube.L

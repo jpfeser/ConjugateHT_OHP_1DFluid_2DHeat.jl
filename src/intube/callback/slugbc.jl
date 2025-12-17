@@ -1,10 +1,12 @@
 export slugbc_affect!,slugbc_condition
+
 # boiling_condition,
 function slugbc_condition(u,t,integrator)
     return true
 end
 
 function slugbc_affect!(integrator)
+
     sys = getcurrentsys!(integrator.u,integrator.p);
     unew = deepcopy(integrator.u)
 

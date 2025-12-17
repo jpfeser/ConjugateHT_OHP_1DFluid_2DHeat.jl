@@ -1,4 +1,5 @@
 export boiling_affect!,nucleateboiling,boiling_condition
+VERBOSE_CALLBACKS = Ref(false) # for turning off/on printouts from callbacks
 # boiling_condition,
 function boiling_condition(u,t,integrator)
     t_interval = 1e-2
@@ -35,6 +36,9 @@ function boiling_affect!(integrator)
     boiltime_update_flags = Bool.(zero(p.wall.boiltime_stations))
     for i = 1:length(p.wall.Xstations)
         if ifamong(p.wall.Xstations[i], p.liquid.Xp, p.tube.L) && suitable_for_boiling(p,i) && superheat_flag[i]
+        
+                VERBOSE_CALLBACKS[] && println("CALLBACK: boiling_affect! at t=$(integrator.t)")
+                
                 push!(integrator.p.cache.boil_hist,[i,integrator.t]);
                 b_count += 1;
 
@@ -49,7 +53,7 @@ function boiling_affect!(integrator)
                 boiltime_update_flags[i] = true
                 # p.wall.boiltime_stations[i] = integrator.t
             elseif !ifamong(p.wall.Xstations[i], p.liquid.Xp, p.tube.L)
-                boiltime_update_flags[i] = true
+                boiltime_update_flags[i] = true # what's up with this line?
                 # p.wall.boiltime_stations[i] = integrator.t
         end
     end
@@ -81,6 +85,7 @@ function boiling_affect!(integrator)
 
     resize!(integrator.u,length(unew))
     integrator.u = deepcopy(unew)
+    
 end
 
 function nucleateboiling(sys,Xvapornew,Pinsert)

@@ -1,9 +1,12 @@
 export vaporMergingAffect!,vaporMergingCondition,vaporMerging
+VERBOSE_CALLBACKS = Ref(false)
 
 function vaporMergingAffect!(integrator)
 
+    VERBOSE_CALLBACKS[] && println("CALLBACK: vaporMergingAffect! at t=$(integrator.t)")
+
     p = deepcopy(getcurrentsys!(integrator.u,integrator.p));
-    δv = p.wall.L_newbubble
+    δv = 2*p.wall.L_newbubble
 
     L = p.tube.L;
 
