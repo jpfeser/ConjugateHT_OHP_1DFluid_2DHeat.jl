@@ -1,5 +1,9 @@
 export boiling_affect!,nucleateboiling,boiling_condition
 VERBOSE_CALLBACKS = Ref(false) # for turning off/on printouts from callbacks
+
+# Constants (can be adjusted)
+DEFAULT_L_ADJUST_MAX_FACTOR = 1.0  # Factor to limit mass adjustment length
+
 # boiling_condition,
 function boiling_condition(u,t,integrator)
     t_interval = 1e-2
@@ -121,6 +125,9 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
     Nvapor = length(P)
     loop_plus_index = [2:Nvapor;1]
     loop_plus_index_new = [3:Nvapor+1;1:2]
+    # New: add loop_minus_index arrays for handling wrap-around cases
+    loop_minus_index = [Nvapor;1:Nvapor-1]
+    loop_minus_index_new = [Nvapor+1;1:Nvapor]
 
     Lfilm_start_new = insert!(Lfilm_start,index+1,Linsert/8)
     Lfilm_end_new = insert!(Lfilm_end,index+1,Linsert/8)
@@ -144,91 +151,121 @@ function nucleateboiling(sys,Xvapornew,Pinsert)
     sysnew.vapor.Lfilm_start = Lfilm_start_new
     sysnew.vapor.Lfilm_end = Lfilm_end_new
 
-    # Mvapor_old = sum(getMvapor(sys))
-    # Mfilm_old = sum(sum.(getMfilm(sys)))
+    # New: improved L_adjust calculation with vapor density correction
+    @unpack PtoD = sys.tube
+    ρinsert = PtoD(Pinsert)
     Mvapor_new = sum(getMvapor(sysnew))
     Mfilm_new = sum(sum.(getMfilm(sysnew)))
     Mliquid_new = sum(getMliquid(sysnew))
     Mold = sysnew.cache.mass
-    L_adjust = (Mvapor_new + Mfilm_new + Mliquid_new - Mold)./ (ρₗ*Ac)
+    L_adjust = (Mvapor_new + Mfilm_new + Mliquid_new - Mold)./ (ρₗ*Ac) .* (1 + ρinsert/ρₗ)
 
     Lvaporplug = XptoLvaporplug(sysnew.liquid.Xp,sysnew.tube.L,sysnew.tube.closedornot)
     Lpurevapor = Lvaporplug .- Lfilm_start_new .- Lfilm_end_new
     Lliquidslug = XptoLliquidslug(Xpnew,sys.tube.L)
 
 
+    maxindex = 0
+    maxvalue_type = 0  # New: track which type of adjustment was made (1: Lfilm_start, 2: Lfilm_end, 3: Lpurevapor)
 
-    maxindex = 0;
-
+    # L_adjust < 0 means we need to shrink the vapor part
     if L_adjust < 0
-        L_newbubble = sysnew.wall.L_newbubble
-        L_adjust = (-L_adjust > L_newbubble) ? -L_newbubble : L_adjust
+        # Limit the shrinking length so it doesn't look unphysical for one boiling event
+        L_adjust_max = DEFAULT_L_ADJUST_MAX_FACTOR * sysnew.wall.L_newbubble
+        L_adjust = (-L_adjust > L_adjust_max) ? -L_adjust_max : L_adjust
 
-        maxvalueindex = findmax(Lpurevapor)
-        maxvalue = maxvalueindex[1]
-        maxindex = maxvalueindex[2]
+        # First try to find the maximum length of pure vapor and shrink it
+        Lpurevapor_maxvalueindex = findmax(Lpurevapor)
+        Lpurevapor_maxvalue = Lpurevapor_maxvalueindex[1]
+        Lpurevapor_maxindex = Lpurevapor_maxvalueindex[2]
 
-        if maxvalue > L_adjust
+        # If the longest pure vapor part is long enough, shrink it
+        if Lpurevapor_maxvalue > -L_adjust
+            maxvalue = Lpurevapor_maxvalue
+            maxindex = Lpurevapor_maxindex
+            maxvalue_type = 3  # Lpurevapor
+
             sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1]+L_adjust,sysnew.liquid.Xp[maxindex][2]),L)
-            # println(L_adjust, "-")
-        else 
-            maxindex = 0
-            println("boiling error!")
-        end
-    else
-        # L_newbubble = sysnew.wall.L_newbubble
-        # L_adjust = (L_adjust > L_newbubble) ? L_newbubble : L_adjust
+        # If pure vapor is not long enough, try to shrink the longest liquid film part
+        else
+            # Find the index of the longest total liquid film part
+            maxindex = findmax(Lfilm_start_new .+ Lfilm_end_new)[2]
 
+            Lfilm_maxvalueindex = findmax([Lfilm_start_new[maxindex], Lfilm_end_new[maxindex]])
+            maxvalue = Lfilm_maxvalueindex[1]
+            maxvalue_type = Lfilm_maxvalueindex[2]  # 1: Lfilm_start, 2: Lfilm_end
+
+            if maxvalue_type == 1
+                Afilm = getδarea(Ac, d, δstart_new[maxindex])
+                factor_adjust = Ac / (Ac - Afilm)
+
+                if maxvalue > -L_adjust * factor_adjust
+                    sysnew.vapor.Lfilm_start[maxindex] = sysnew.vapor.Lfilm_start[maxindex] + L_adjust * factor_adjust
+                    sysnew.liquid.Xp[loop_minus_index_new[maxindex]] = mod.((sysnew.liquid.Xp[loop_minus_index_new[maxindex]][1], sysnew.liquid.Xp[loop_minus_index_new[maxindex]][2] - L_adjust * factor_adjust), L)
+                else
+                    println("L_adjust:", L_adjust)
+                    println("maxvalue:", maxvalue)
+                    println("maxvalue_type:", maxvalue_type)
+                    println("factor_adjust:", factor_adjust)
+                    println("case1: mass conservation enforcement failed in this boiling event! if this happens occasionally, it is fine, but if it happens frequently, check mass conservation!")
+                    maxindex = 0
+                end
+
+            elseif maxvalue_type == 2
+                Afilm = getδarea(Ac, d, δend_new[maxindex])
+                factor_adjust = Ac / (Ac - Afilm)
+
+                if maxvalue > -L_adjust * factor_adjust
+                    sysnew.vapor.Lfilm_end[maxindex] = sysnew.vapor.Lfilm_end[maxindex] + L_adjust * factor_adjust
+                    sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1] + L_adjust * factor_adjust, sysnew.liquid.Xp[maxindex][2]), L)
+                else
+                    println("L_adjust:", L_adjust)
+                    println("maxvalue:", maxvalue)
+                    println("maxvalue_type:", maxvalue_type)
+                    println("factor_adjust:", factor_adjust)
+                    println("case2: mass conservation enforcement failed in this boiling event! if this happens occasionally, it is fine, but if it happens frequently, check mass conservation!")
+                    maxindex = 0
+                end
+            else
+                println("error in boiling, maxvalue_type is not 1, 2, or 3")
+                maxindex = 0
+            end
+        end
+
+    # L_adjust > 0 means we need to increase the vapor part (shrink liquid)
+    else
         maxvalueindex = findmax(Lliquidslug)
         maxvalue = maxvalueindex[1]
         maxindex = maxvalueindex[2]
+        maxvalue_type = 3  # Treating liquid adjustment same as Lpurevapor for Xarrays reconstruction
 
         if maxvalue > L_adjust
             sysnew.liquid.Xp[maxindex] = mod.((sysnew.liquid.Xp[maxindex][1]+L_adjust,sysnew.liquid.Xp[maxindex][2]),L)
-            # sysnew.liquid.Xarrays[maxindex] = constructoneXarray(sysnew.liquid.Xp[maxindex],length(sysnew.liquid.Xarrays[maxindex]),L)
-            # println(L_adjust," +")
         else 
             maxindex = 0
-            println("boiling error!")
+            println("boiling error: cannot expand vapor (shrink liquid)!")
         end
     end
 
     # up to now we got the correct Xpnew, next step is to get Xarraysnew, the splitted Xarrays.
-
-    Xarraysnew,θarraysnew = getnewXθarrays(index,sysnew.liquid.Xp,Xarrays,θarrays,L,maxindex)
-    # θarraysnew = getnewθarrays(index,Xp,sysnew.liquid.Xp,Xarrays,θarrays,L,closedornot)
+    # New: pass maxvalue_type to getnewXθarrays so it knows which slug to reconstruct
+    Xarraysnew,θarraysnew = getnewXθarrays(index,sysnew.liquid.Xp,Xarrays,θarrays,L,maxindex,maxvalue_type)
 
     sysnew.liquid.Xarrays = Xarraysnew
     sysnew.liquid.θarrays = θarraysnew
-        # Lfilm_start_new[index+1] = (Ac*Lliquid_adjust*ρₗ  + Mvapor_old + Mfilm_old - Mvapor_new - Mfilm_new) ./ ρₗ ./ getδarea(Ac,d,δdeposit) ./ 2
-        # Lfilm_end_new[index+1] = Lfilm_start_new[index+1]
-
-        # if Lfilm_start_new[index+1] < 0
-        #     Lfilm_start_new[index+1] = 5e-5
-        #     Lfilm_end_new[index+1] = Lfilm_start_new[index+1]
-        #     println("new film length smaller than zero. potential error!")
-        # end
-
-    # sysnew.vapor.Lfilm_start = Lfilm_start_new
-    # sysnew.vapor.Lfilm_end = Lfilm_end_new
-    # Lvaporplug = XptoLvaporplug(sysnew.liquid.Xp,sysnew.tube.L,sysnew.tube.closedornot)
-    # Lpurevapor = Lvaporplug .- Lfilm_start_new .- Lfilm_end_new
-    # Lliquidslug = XptoLliquidslug(Xpnew,sys.tube.L)
-    # println(Lliquidslug[index])
-    # println(Lliquidslug[index+1])
-    # println(p.liquid.Xp)
 
     θ_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall = sys_interpolation(sysnew)
     heightg_interp = sysnew.mapping.heightg_interp
     sysnew.mapping = Mapping(θ_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall,heightg_interp)
-    # sysnew.mapping = Mapping(θ_interp_walltoliquid, θ_interp_liquidtowall, H_interp_liquidtowall, P_interp_liquidtowall)
-
-    # println(Pnew[index-2:index+5])
 
 return sysnew
 end
 
-function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex)
+# New: updated getnewXθarrays with maxvalue_type parameter
+function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex,maxvalue_type)
+    Nvaporplug = length(Xpnew)
+    maxindex_minus = (maxindex != 1) ? maxindex-1 : Nvaporplug
+
     Nold= length(Xarrays_old[index])
 
     Xarraysnew = deepcopy(Xarrays_old)
@@ -257,8 +294,17 @@ function getnewXθarrays(index,Xpnew,Xarrays_old,θarrays_old,L,maxindex)
     insert!(θarraysnew, index,θarraysnewleft)
     insert!(θarraysnew, index+1,θarraysnewright)
 
+    # New: reconstruct Xarrays based on which type of adjustment was made
     if maxindex != 0
-        Xarraysnew[maxindex] = constructoneXarray(Xpnew[maxindex],length(Xarraysnew[maxindex]),L)
+        if maxvalue_type == 2 || maxvalue_type == 3
+            # For Lfilm_end or Lpurevapor adjustment, reconstruct the maxindex slug
+            Xarraysnew[maxindex] = constructoneXarray(Xpnew[maxindex],length(Xarraysnew[maxindex]),L)
+        elseif maxvalue_type == 1
+            # For Lfilm_start adjustment, reconstruct the slug to the left (maxindex_minus)
+            Xarraysnew[maxindex_minus] = constructoneXarray(Xpnew[maxindex_minus],length(Xarraysnew[maxindex_minus]),L)
+        else
+            println("warning in getnewXθarrays: maxvalue_type is not 1, 2, or 3")
+        end
     end
 
     Xarraysnew,θarraysnew
@@ -291,16 +337,6 @@ end
         return NaN
 end
 
-# function getarrayindex(X,Xarray)
-
-# for arrayindex = 1:length(Xarray)
-#     if (X >= Xarray[arrayindex] && X <= Xarray[arrayindex+1]) || (X >= Xarray[arrayindex] && Xarray[arrayindex] >= Xarray[arrayindex+1]) || (X <= Xarray[arrayindex+1] && Xarray[arrayindex] >= Xarray[arrayindex+1])
-#         return (arrayindex > 1.1) ? arrayindex : 2
-# end
-#     end
-#         return NaN
-# end
-
 function getnewXp(Xp,index,Xvapornew,Lliquid_adjust,L,closedornot)
 
     Xpnew = deepcopy(Xp)
@@ -316,21 +352,6 @@ function getnewXp(Xp,index,Xvapornew,Lliquid_adjust,L,closedornot)
 
     return Xpnew
 end
-
-# # simplified non mass conservation
-# function getnewXp(Xp,index,Xvapornew,L)
-
-#     Xpnew = deepcopy(Xp)
-
-#     insertXp1=mod.((Xp[index][1],Xvapornew[1]),L)
-#     insertXp2=mod.((Xvapornew[2],Xp[index][2]),L)
-
-#     splice!(Xpnew, index)
-#     insert!(Xpnew, index,insertXp1)
-#     insert!(Xpnew, index+1,insertXp2)
-
-#     return Xpnew
-# end
 
 
 function getnewM(M,index,Minsert,closedornot)
@@ -349,23 +370,6 @@ function getsuperheat(Xstation,sys)
     return Δθ
 end
 
-
-# ```
-#     get the index of element of Xarray closest to X.
-#     closed loop considered
-# ```
-# function getoneXarrayindex(X,Xarray)
-#     for i = 1:length(Xarray)
-#         if (Xarray[i] >= Xarray[i+1]) && ((Xarray[i] <= X) || (Xarray[i+1] >= X))
-#             return i
-#         end
-#         if (X >= Xarray[i] && X <= Xarray[i+1])
-#             return i
-#         end
-#     end
-
-#     return length(Xarray)
-# end
 
 function suitable_for_boiling(p,i)
     suitable_flag =  true
