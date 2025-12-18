@@ -143,7 +143,7 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
 
     if Xpvapor[2] > Xpvapor[1]
         println("Xp error 1")
-        return "Xp error 1"
+        error("Xp error 1")
         
     elseif mod(Xpvapor[1],L) + Lfilm_start > L
         
@@ -186,7 +186,7 @@ function XHloop_append(i,H_film_start,H_film_end,sys)
         
     else 
         println("Xp error 1")
-        return "Xp error 2"
+        error("Xp error 2")
     end
 
 return X_inner_loop_append,H_inner_loop_append

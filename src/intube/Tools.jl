@@ -105,7 +105,7 @@ function XMtovec(Xp::Array{Tuple{Float64,Float64},1},dXdt::Array{Tuple{Float64,F
         return u
     end
             println("the lengthes of X and dXdt and M do not match!")
-            return "error"
+            error("From XMtovec: the lengths of X and dXdt and M do not match!")
 
 end
 
@@ -198,7 +198,7 @@ function vectoXM(u::Array{Float64,1})
         return Xp,dXdt,M
     end
 
-return "error"
+error("From vectoXM(u::Array{Float64,1}): Not a recognized case")
 
 end
 
@@ -262,7 +262,7 @@ if mod(length(u),6) == 0
     return Xp,dXdt,M,δ
 end
 
-return "error"
+error("From vectoXMδ(u::Array{Float64,1}): Not a recognized case")
 
 end
 
@@ -274,6 +274,7 @@ end
 function vectoXMδL(u::Array{Float64,1})
 if mod(length(u),9) == 2
     return "haven't finish new open end code"
+    error("From vectoXMδL(u::Array{Float64,1}):  mod(length(u),9) == 2 ")
 end
 
 if mod(length(u),9) == 0
@@ -308,10 +309,10 @@ if mod(length(u),9) == 0
 
     return Xp,dXdt,M,δstart,δend,Lfilm_start,Lfilm_end
 end
-
-return "new function error"
+error("From vectoXMδL(u::Array{Float64,1}):  not a recognized case.")
 
 end
+
 
 """
     This function is to transform Xp of every interface, and L of the tube to form an array of vapor length
