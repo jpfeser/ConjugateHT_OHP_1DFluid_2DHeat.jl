@@ -57,7 +57,11 @@ function fixdx_affect!(integrator)
     θ_interp_liquidtowall = p.mapping.θ_interp_liquidtowall
 
     Lliquid = XptoLliquidslug(p.liquid.Xp,sys.tube.L)
-    Nliquid =  ceil.(Int, Lliquid./p.tube.d)
+    
+    
+    Nliquid = round.(Int, Lliquid./dξ_init) .+ 1;
+    # Claude AI suggests that this old line wont always put the grid between δξmin, δξmax
+    #Nliquid =  ceil.(Int, Lliquid./p.tube.d) 
 
     for i in indexReconstructSite
         # println("reconstruct dx! in", i ," at ",integrator.t)
