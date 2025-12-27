@@ -1,5 +1,8 @@
 module ComputationalHeatTransfer
 
+include("Parameters.jl")
+using .Parameters
+
 using DocStringExtensions
 using Reexport
 using Revise

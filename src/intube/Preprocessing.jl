@@ -30,7 +30,9 @@ function onesideXp(ohp,tube::Tube,line)
     X0,real_ratio
 end
 
-function randomXp(tube::Tube;numofslugs=30,chargeratio=0.46,σ_charge=0.1)
+function randomXp(tube::Tube;numofslugs=30,σ_charge=0.1)
+
+    chargeratio = CHARGE_RATIO_DEFAULT[];
 
     L = tube.L
     Lmin = tube.d
@@ -102,7 +104,13 @@ end
 #     initialize_ohpsys(fluid_type,sys,p_fluid,Tref,power)
 # end
 
-function initialize_ohpsys(sys,p_fluid,power;boil_waiting_time=1.0,Rn_boil=3e-6,inertia_f=1.3,tube_d=1e-3,tubeshape="square",g_angle=(3/2)*π,Nu=3.6,slugnum=30,film_fraction=0.3,g = 0*9.81,ηplus=0.6,ηminus=0.0,nucleatenum = 250,L_newbubble = 6e-3)
+function initialize_ohpsys(sys,p_fluid,power;inertia_f=1.3,tube_d=1e-3,tubeshape="square",g_angle=(3/2)*π,Nu=3.6,g = 0*9.81,ηplus=0.6,ηminus=0.0,L_newbubble = 6e-3)
+
+    slugnum = SLUGNUM_DEFAULT[]; 
+    nucleatenum = NUCLEATENUM_DEFAULT[];
+    Rn_boil=RN_BOIL_DEFAULT[]; # 3e-6
+    film_fraction = FILM_FRACTION_DEFAULT[]; # 0.3
+    boil_waiting_time = BOIL_WAITING_TIME_DEFAULT[]; # 1.0
 
     L = (sys.qline[1].arccoord[1] + sys.qline[1].arccoord[end])  # total length of the pipe when streched to a 1D pipe (an approximate here)
     ohp = sys.qline[1]
