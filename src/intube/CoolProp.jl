@@ -34,20 +34,20 @@ function createCoolPropinterpolation(fluid_type::String,numofpoints=10000)
     # --- Clamping can reduce numerical instabilities ---
     #.     (But also can hide issues.  Do we need this?)
     PtoT_raw = LinearInterpolation(Prange, Trange)
-    PtoT = x -> PtoT_raw(clamp(x, Pmin, Pmax))
+    PtoT = x -> PtoT_raw.(clamp.(x, Pmin, Pmax))
 
     DtoP_raw = LinearInterpolation(Drange, Prange);
-    DtoP = x -> DtoP_raw(clamp(x, Drmin, Drmax))
+    DtoP = x -> DtoP_raw.(clamp.(x, Drmin, Drmax))
 
     TtoP_raw = LinearInterpolation(Trange, Prange);
-    TtoP = x -> TtoP_raw(clamp(x,Tmin,Tcrit));
+    TtoP = x -> TtoP_raw.(clamp.(x,Tmin,Tcrit));
 
 
     PtoD_raw = LinearInterpolation(Prange, Drange);
-    PtoD = x -> PtoD_raw(clamp(x,Pmin,Pmax));
+    PtoD = x -> PtoD_raw.(clamp.(x,Pmin,Pmax));
 
     PtoHfg_raw = LinearInterpolation(Prange, Hfgrange);
-    PtoHfg = x -> PtoHfg_raw(clamp(x,Pmin,Pmax));
+    PtoHfg = x -> PtoHfg_raw.(clamp.(x,Pmin,Pmax));
 
     PtoT,TtoP,PtoD,DtoP,PtoHfg
 end
