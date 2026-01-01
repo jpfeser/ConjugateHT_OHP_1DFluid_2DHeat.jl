@@ -1,11 +1,23 @@
 # ComputationalHeatTransfer.jl
 tools for numerical simulation of conductive and convective heat transfer.  
 
-Described in:
+Algorithm originally described in:
 
 Y. Li, J.D. Eldredge, A.S. Lavine et al., "A conjugate heat transfer model of oscillating heat pipe dynamics, performance, and dryout," International Journal of Heat and Mass Transfer 227 (2024) 125530
 
 [![Dev](https://img.shields.io/badge/docs-stable-blue.svg)](https://liyuxuan48.github.io/ComputationalHeatTransfer.jl](https://github.com/jpfeser/ConjugateHT_OHP_1DFluid_2DHeat.jl)
+
+# Differentiating Features From Initial Fork
+
+- parameters.jl file to allow runtime changes to fill fraction, bubble nucleation size, and more.
+- Fixes a number of callback bugs in the original package
+- improved error reporting
+- support for other Heater/condenser geometries
+- add acetone as the working fluid (not fully part of CoolProp)
+- add additional postprocessing visualization features (BoilStatus, BoilTemp)
+- adds clamps to thermodynamic calls to increase stability.
+
+(Modified) installation instructions copied/edited from Y. Li's project:  
 
 This readme file assumes user already installed the **IJulia** package and got the jupyter notebook running.
 
@@ -67,3 +79,4 @@ And then, open your jupyter notebook as usual
 using IJulia
 notebook()
 ```
+
