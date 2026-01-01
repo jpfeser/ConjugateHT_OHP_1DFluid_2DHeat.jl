@@ -1,5 +1,5 @@
 # ComputationalHeatTransfer.jl
-tools for numerical simulation of conductive and convective heat transfer.  
+tools for simulating flat plate OHPs using an conjugate heat transfer model.  1D slug/vapor transport in the fluid with slugs that have their own temperature grid; 2D (thickness averaged) temperature evolution in a the solid.
 
 Algorithm originally described in:
 
