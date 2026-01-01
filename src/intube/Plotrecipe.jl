@@ -1,4 +1,4 @@
-export OHP,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall,OHPBoilStatus
+export OHP,OHPTemp,OHPSlug,OHPPres,OHPSuper,OHPTexp,OHPTcurve,OHPCond,OHPV,OHP1DT,OHP1DP,OHP1DΔT,OHPTwall,OHPBoilStatus, OHPBoilTemp
 
 using RecipesBase
 using Plots
@@ -20,6 +20,7 @@ mutable struct OHP1DP end
 mutable struct OHP1DΔT end
 mutable struct OHPTwall end
 mutable struct OHPBoilStatus end
+mutable struct OHPBoilTemp end
 
 # mutable struct OHP end
 
@@ -660,6 +661,9 @@ end
     eparams = SimuResult.integrator_plate.p.qflux
     cparams = SimuResult.integrator_plate.p.qhdT
     
+    # Get pressure interpolator
+    P_interp = tube_sys.mapping.P_interp_liquidtowall
+    
     # Plot setup
     xlabel --> "x [m]"
     ylabel --> "y [m]"
@@ -668,83 +672,151 @@ end
     legend --> false
     aspect_ratio --> :equal
     framestyle --> :box
+    dpi --> 150
     
     annotation := [(0.0, 0.035, string("time = ", round(t_current, digits=2), " s")),
                    (0.0, -0.035, string("ΔT_crit = ", round(ΔTmin, digits=2), " K"))]
     
-    # --- Draw evaporator outlines (red) ---
+    # --- Draw evaporator outlines (red, semi-transparent) ---
     for ep in eparams
         @series begin
+            fillcolor := :red
+            fillalpha := 0.2
+            linecolor := :red
             ep.body
         end
     end
-
-    # --- Draw condenser outlines (blue) ---
+    
+    # --- Draw condenser outlines (blue, semi-transparent) ---
     for cp in cparams
         @series begin
+            fillcolor := :blue
+            fillalpha := 0.2
+            linecolor := :blue
             cp.body
         end
     end
     
-    # --- Plot liquid slugs colored by superheat (graded) ---
+    # --- Plot liquid slugs colored by superheat (graded lines) ---
+    # --- Plot liquid slugs colored by superheat (scatter) ---
+Xp = tube_sys.liquid.Xp
+
+for j in eachindex(Xp)
+    Xarrays_j = tube_sys.liquid.Xarrays[j]
+    θarrays_j = tube_sys.liquid.θarrays[j]
+    
+    # Get local pressure from interpolator, then Tsat
+    P_local = P_interp[Xarrays_j]
+    Tsat_liquid = PtoT.(P_local)
+    ΔT_liquid = θarrays_j .- Tsat_liquid
+    
+    # Convert to 2D coordinates
+    x2D_slug = interp_x.(Xarrays_j)
+    y2D_slug = interp_y.(Xarrays_j)
+    
+    # Normalized superheat for coloring
+    ΔT_normalized = clamp.(ΔT_liquid ./ ΔTmin, 0.0, 1.0)
+    slug_colors = [RGB(r, 0.0, 1.0 - r) for r in ΔT_normalized]
+    
+    @series begin
+        seriestype := :scatter
+        marker := :circle
+        markersize := 2
+        markercolor := slug_colors
+        markerstrokewidth := 0
+        x2D_slug, y2D_slug
+    end
+end
+    
+    # --- Plot boiling stations (batched for speed) ---
+    x2D_stations = [interp_x(X) for X in Xstations]
+    y2D_stations = [interp_y(X) for X in Xstations]
+    
+    # Calculate all ring colors at once
+    dt_since_boil = t_current .- boiltime_stations
+    dt_ratios = clamp.(dt_since_boil ./ boil_interval, 0.0, 1.0)
+    ring_colors = [RGB(r, 0.0, 1.0 - r) for r in dt_ratios]
+    
+    # Colored rings (single series for all stations)
+    @series begin
+        seriestype := :scatter
+        marker := :circle
+        markersize := 6
+        markeralpha := 0.2
+        markercolor := ring_colors
+        markerstrokewidth := 0
+        x2D_stations, y2D_stations
+    end
+    
+    # Black 'x' markers (single series for all stations)
+    @series begin
+        seriestype := :scatter
+        marker := :x
+        markersize := 4
+        markercolor := :black
+        x2D_stations, y2D_stations
+    end
+end
+
+@recipe function f(::OHPBoilTemp, i::Int64, SimuResult::SimulationResult)
+    
+    tube_sys = getcurrentsys!(SimuResult.tube_hist_u[i], SimuResult.integrator_tube.p)
+    tube_hist_t = SimuResult.tube_hist_t
+    t_current = tube_hist_t[i]
+    
+    # Get wall properties
+    wall = SimuResult.integrator_tube.p.wall
+    Rn = wall.Rn
+    fluid_type = wall.fluid_type
+    
+    # Get tube properties
+    @unpack PtoT, TtoP = tube_sys.tube
+    d = tube_sys.tube.d
+    L = tube_sys.tube.L
+    
+    # Calculate Tref and superheat threshold
+    Tref = (PtoT(maximum(tube_sys.vapor.P)) + PtoT(minimum(tube_sys.vapor.P)))/2
+    ΔTmin = RntoΔT(Rn, Tref, fluid_type, d, TtoP)
+    T_threshold = Tref + ΔTmin
+
+    any(isnan, tube_sys.vapor.P) && error("NaN detected in vapor.P at frame $i")
+    isnan(Tref) && error("NaN detected in Tref at frame $i")
+    isnan(ΔTmin) && error("NaN detected in ΔTmin at frame $i")
+    
+    # Plot setup
+    xlabel --> "x / L_tube"
+    ylabel --> "Temperature [K]"
+    ylims := (Tref, Tref + 1.2*ΔTmin)
+    xlims := (0.0, 1.0)
+    legend --> false
+    framestyle --> :box
+    
+    title := string("time = ", round(t_current, digits=2), " s")
+    
+    # --- Red horizontal line at boiling threshold ---
+    @series begin
+        seriestype := :hline
+        linecolor := :red
+        linewidth := 2
+        linestyle := :dash
+        [T_threshold]
+    end
+    
+    # --- Plot liquid slug temperatures ---
     Xp = tube_sys.liquid.Xp
     
     for j in eachindex(Xp)
         Xarrays_j = tube_sys.liquid.Xarrays[j]
         θarrays_j = tube_sys.liquid.θarrays[j]
         
-        # Get saturation temperature at liquid positions
-        Tsat_liquid = PtoT.(tube_sys.mapping.P_interp_liquidtowall[Xarrays_j])
-        ΔT_liquid = θarrays_j .- Tsat_liquid
-        
-        # Convert to 2D coordinates
-        x2D_slug = interp_x.(Xarrays_j)
-        y2D_slug = interp_y.(Xarrays_j)
-        
-        # Graded color: blue (ΔT <= 0) to red (ΔT >= ΔTmin)
-        ΔT_normalized = clamp.(ΔT_liquid ./ ΔTmin, 0.0, 1.0)
-        slug_colors = [RGB(r, 0.0, 1.0 - r) for r in ΔT_normalized]
+        # Normalize x by tube length
+        x_normalized = Xarrays_j ./ L
         
         @series begin
-            seriestype := :scatter
-            marker := :circle
-            markersize := 3
-            markercolor := slug_colors
-            markerstrokewidth := 0
-            x2D_slug, y2D_slug
-        end
-    end
-    
-    # --- Plot boiling stations ---
-    for j in eachindex(Xstations)
-        Xstation = Xstations[j]
-        x2D = interp_x(Xstation)
-        y2D = interp_y(Xstation)
-        
-        # Time condition: how close to being able to boil again
-        dt_since_boil = t_current - boiltime_stations[j]
-        dt_ratio = clamp(dt_since_boil / boil_interval, 0.0, 1.0)
-        # Color: blue (dt=0, just boiled) to red (dt>=boil_interval, ready)
-        ring_color = RGB(dt_ratio, 0.0, 1.0 - dt_ratio)
-        
-        # Colored ring (behind the x)
-        @series begin
-            seriestype := :scatter
-            marker := :circle
-            markersize := 6
-            markeralpha := 0.6
-            markercolor := ring_color
-            markerstrokewidth := 0
-            [x2D], [y2D]
-        end
-        
-        # Black 'x' marker
-        @series begin
-            seriestype := :scatter
-            marker := :x
-            markersize := 4
-            markercolor := :black
-            [x2D], [y2D]
+            seriestype := :path
+            linewidth := 2
+            linecolor := :blue
+            x_normalized, θarrays_j
         end
     end
 end
